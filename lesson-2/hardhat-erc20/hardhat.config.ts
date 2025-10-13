@@ -1,33 +1,48 @@
-import { HardhatUserConfig, vars } from "hardhat/config"
-import "@nomicfoundation/hardhat-toolbox"
-import "@parity/hardhat-polkadot"
+import type { HardhatUserConfig } from "hardhat/config";
+
+import hardhatToolboxMochaEthersPlugin from "@nomicfoundation/hardhat-toolbox-mocha-ethers";
+import { configVariable } from "hardhat/config";
 
 const config: HardhatUserConfig = {
-    solidity: "0.8.28",
-    networks: {
-        hardhat: {
-            polkavm: true,
-            nodeConfig: {
-                nodeBinaryPath: "./bin/dev-node",
-                rpcPort: 8000,
-                dev: true,
-            },
-            adapterConfig: {
-                adapterBinaryPath: "./bin/eth-rpc",
-                dev: true,
-            },
+  plugins: [hardhatToolboxMochaEthersPlugin],
+  solidity: {
+    profiles: {
+      default: {
+        version: "0.8.28",
+      },
+      production: {
+        version: "0.8.28",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
         },
-        localNode: {
-            polkavm: false,
-            url: `http://127.0.0.1:8545`,
-            accounts: [vars.get("SUBSTRATE_LOCAL_PRIVATE_KEY")],
-        },
-        polkadotHubTestnet: {
-            polkavm: true,
-            url: "https://testnet-passet-hub-eth-rpc.polkadot.io",
-            accounts: [vars.get("PRIVATE_KEY")],
-        },
+      },
     },
-}
+  },
+  networks: {
+    hardhatMainnet: {
+      type: "edr-simulated",
+      chainType: "l1",
+    },
+    hardhatOp: {
+      type: "edr-simulated",
+      chainType: "op",
+    },
+    sepolia: {
+      type: "http",
+      chainType: "l1",
+      url: configVariable("SEPOLIA_RPC_URL"),
+      accounts: [configVariable("SEPOLIA_PRIVATE_KEY")],
+    },
+    localhost: {
+      type: "http",
+      chainType: "l1",
+      url: `http://127.0.0.1:8545`,
+      accounts: [configVariable("LOCAL_PRIVATE_KEY")],
+    },
+  },
+};
 
-export default config
+export default config;
