@@ -1,0 +1,8 @@
+{
+  "../node_modules/.pnpm/next@10.2.3_react-dom@17.0.2_react@17.0.2__react@17.0.2/node_modules/next/dist/client/next-dev.js -> ./dev/noop": {
+    "id": "./node_modules/.pnpm/next@10.2.3_react-dom@17.0.2_react@17.0.2__react@17.0.2/node_modules/next/dist/client/dev/noop.js",
+    "files": [
+      "static/chunks/node_modules_pnpm_next_10_2_3_react-dom_17_0_2_react_17_0_2__react_17_0_2_node_modules_next_d-904696.js"
+    ]
+  }
+}
