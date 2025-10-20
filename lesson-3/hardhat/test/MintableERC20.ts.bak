@@ -1,0 +1,319 @@
+import { expect } from "chai";
+import { network } from "hardhat";
+
+const { ethers } = await network.connect();
+
+describe("MintableERC20", function () {
+    // Test deployment and initial state
+    describe("Deployment", function () {
+        it("Should deploy with correct name and symbol", async function () {
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            expect(await token.name()).to.equal("TestToken");
+            expect(await token.symbol()).to.equal("TEST");
+            expect(await token.decimals()).to.equal(18);
+        });
+
+        it("Should mint 100,000 tokens to deployer on deployment", async function () {
+            const [owner] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            const expectedBalance = ethers.parseEther("100000");
+            expect(await token.balanceOf(owner.address)).to.equal(expectedBalance);
+        });
+
+        it("Should set the deployer as owner", async function () {
+            const [owner] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            expect(await token.owner()).to.equal(owner.address);
+        });
+
+        it("Should set interval to 3600 seconds (1 hour)", async function () {
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            expect(await token.interval()).to.equal(3600n);
+        });
+    });
+
+    // Test ERC20 basic functionality
+    describe("ERC20 Functionality", function () {
+        it("Should transfer tokens between accounts", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            const transferAmount = ethers.parseEther("100");
+            await token.transfer(addr1.address, transferAmount);
+
+            expect(await token.balanceOf(addr1.address)).to.equal(transferAmount);
+        });
+
+        it("Should fail if sender doesn't have enough tokens", async function () {
+            const [owner, addr1, addr2] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await expect(
+                token.connect(addr1).transfer(addr2.address, ethers.parseEther("1"))
+            ).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
+        });
+
+        it("Should update balances after transfers", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            const initialOwnerBalance = await token.balanceOf(owner.address);
+            const transferAmount = ethers.parseEther("50");
+
+            await token.transfer(addr1.address, transferAmount);
+
+            expect(await token.balanceOf(owner.address)).to.equal(initialOwnerBalance - transferAmount);
+            expect(await token.balanceOf(addr1.address)).to.equal(transferAmount);
+        });
+    });
+
+    // Test mintToken functionality
+    describe("mintToken", function () {
+        it("Should allow user to mint 100 tokens on first mint", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await token.connect(addr1).mintToken();
+
+            expect(await token.balanceOf(addr1.address)).to.equal(ethers.parseEther("100"));
+        });
+
+        it("Should update lastMintTime after minting", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await token.connect(addr1).mintToken();
+
+            const lastMintTime = await token.lastMintTime(addr1.address);
+            expect(lastMintTime).to.be.greaterThan(0);
+        });
+
+        it("Should fail if user tries to mint before interval passes", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await token.connect(addr1).mintToken();
+
+            await expect(
+                token.connect(addr1).mintToken()
+            ).to.be.revertedWith("You need to wait an hour between mints");
+        });
+
+        it("Should allow minting after interval passes", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await token.connect(addr1).mintToken();
+            const balanceAfterFirstMint = await token.balanceOf(addr1.address);
+
+            // Increase time by 1 hour + 1 second
+            await ethers.provider.send("evm_increaseTime", [3601]);
+            await ethers.provider.send("evm_mine", []);
+
+            await token.connect(addr1).mintToken();
+            const balanceAfterSecondMint = await token.balanceOf(addr1.address);
+
+            expect(balanceAfterSecondMint).to.equal(balanceAfterFirstMint + ethers.parseEther("100"));
+        });
+
+        it("Should allow multiple users to mint independently", async function () {
+            const [owner, addr1, addr2] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await token.connect(addr1).mintToken();
+            await token.connect(addr2).mintToken();
+
+            expect(await token.balanceOf(addr1.address)).to.equal(ethers.parseEther("100"));
+            expect(await token.balanceOf(addr2.address)).to.equal(ethers.parseEther("100"));
+        });
+    });
+
+    // Test canMint view function
+    describe("canMint", function () {
+        it("Should return true for addresses that have never minted", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            expect(await token.canMint(addr1.address)).to.be.true;
+        });
+
+        it("Should return false immediately after minting", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await token.connect(addr1).mintToken();
+
+            expect(await token.canMint(addr1.address)).to.be.false;
+        });
+
+        it("Should return true after interval passes", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await token.connect(addr1).mintToken();
+
+            // Increase time by 1 hour + 1 second
+            await ethers.provider.send("evm_increaseTime", [3601]);
+            await ethers.provider.send("evm_mine", []);
+
+            expect(await token.canMint(addr1.address)).to.be.true;
+        });
+    });
+
+    // Test ownerMint functionality
+    describe("ownerMint", function () {
+        it("Should allow owner to mint any amount to any address", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            const mintAmount = ethers.parseEther("500");
+            await token.ownerMint(addr1.address, mintAmount);
+
+            expect(await token.balanceOf(addr1.address)).to.equal(mintAmount);
+        });
+
+        it("Should fail if non-owner tries to call ownerMint", async function () {
+            const [owner, addr1, addr2] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await expect(
+                token.connect(addr1).ownerMint(addr2.address, ethers.parseEther("100"))
+            ).to.be.revertedWith("Not owner");
+        });
+
+        it("Should allow owner to mint to themselves", async function () {
+            const [owner] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            const initialBalance = await token.balanceOf(owner.address);
+            const mintAmount = ethers.parseEther("1000");
+
+            await token.ownerMint(owner.address, mintAmount);
+
+            expect(await token.balanceOf(owner.address)).to.equal(initialBalance + mintAmount);
+        });
+
+        it("Should allow owner to mint multiple times without interval restriction", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await token.ownerMint(addr1.address, ethers.parseEther("100"));
+            await token.ownerMint(addr1.address, ethers.parseEther("200"));
+            await token.ownerMint(addr1.address, ethers.parseEther("300"));
+
+            expect(await token.balanceOf(addr1.address)).to.equal(ethers.parseEther("600"));
+        });
+    });
+
+    // Test setInterval functionality
+    describe("setInterval", function () {
+        it("Should allow owner to change the interval", async function () {
+            const [owner] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            const newInterval = 1800; // 30 minutes
+            await token.setInterval(newInterval);
+
+            expect(await token.interval()).to.equal(newInterval);
+        });
+
+        it("Should fail if non-owner tries to change interval", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await expect(
+                token.connect(addr1).setInterval(1800)
+            ).to.be.revertedWith("Not owner");
+        });
+
+        it("Should apply new interval to future mints", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            // Change interval to 10 seconds for testing
+            await token.setInterval(10);
+
+            await token.connect(addr1).mintToken();
+
+            // Try to mint after 5 seconds (should fail)
+            await ethers.provider.send("evm_increaseTime", [5]);
+            await ethers.provider.send("evm_mine", []);
+            await expect(
+                token.connect(addr1).mintToken()
+            ).to.be.revertedWith("You need to wait an hour between mints");
+
+            // Try to mint after another 6 seconds (should succeed)
+            await ethers.provider.send("evm_increaseTime", [6]);
+            await ethers.provider.send("evm_mine", []);
+            await token.connect(addr1).mintToken();
+
+            expect(await token.balanceOf(addr1.address)).to.equal(ethers.parseEther("200"));
+        });
+
+        it("Should allow setting interval to 0", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await token.setInterval(0);
+
+            // Should be able to mint multiple times immediately
+            await token.connect(addr1).mintToken();
+            await token.connect(addr1).mintToken();
+            await token.connect(addr1).mintToken();
+
+            expect(await token.balanceOf(addr1.address)).to.equal(ethers.parseEther("300"));
+        });
+    });
+
+    // Test edge cases and complex scenarios
+    describe("Edge Cases", function () {
+        it("Should handle very large mint amounts from owner", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            const largeAmount = ethers.parseEther("1000000000"); // 1 billion tokens
+            await token.ownerMint(addr1.address, largeAmount);
+
+            expect(await token.balanceOf(addr1.address)).to.equal(largeAmount);
+        });
+
+        it("Should track lastMintTime correctly for multiple users", async function () {
+            const [owner, addr1, addr2, addr3] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            await token.connect(addr1).mintToken();
+            await ethers.provider.send("evm_increaseTime", [10]);
+            await ethers.provider.send("evm_mine", []);
+            await token.connect(addr2).mintToken();
+            await ethers.provider.send("evm_increaseTime", [10]);
+            await ethers.provider.send("evm_mine", []);
+            await token.connect(addr3).mintToken();
+
+            const time1 = await token.lastMintTime(addr1.address);
+            const time2 = await token.lastMintTime(addr2.address);
+            const time3 = await token.lastMintTime(addr3.address);
+
+            expect(time2).to.be.greaterThan(time1);
+            expect(time3).to.be.greaterThan(time2);
+        });
+
+        it("Should maintain total supply correctly", async function () {
+            const [owner, addr1, addr2] = await ethers.getSigners();
+            const token = await ethers.deployContract("MintableERC20", ["TestToken", "TEST"]);
+
+            const initialSupply = await token.totalSupply();
+
+            await token.connect(addr1).mintToken();
+            await token.connect(addr2).mintToken();
+            await token.ownerMint(addr1.address, ethers.parseEther("500"));
+
+            const expectedSupply = initialSupply + ethers.parseEther("700"); // 100 + 100 + 500
+            expect(await token.totalSupply()).to.equal(expectedSupply);
+        });
+    });
+});
+
