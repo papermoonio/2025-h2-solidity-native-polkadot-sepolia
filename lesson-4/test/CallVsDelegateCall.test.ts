@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import hre from "hardhat";
 import { Library, Caller, Library__factory, Caller__factory } from "../typechain-types";
 
 describe("Call vs DelegateCall", function () {
@@ -8,17 +8,17 @@ describe("Call vs DelegateCall", function () {
     let libraryAddress: string;
 
     beforeEach(async function () {
-        const [signer] = await ethers.getSigners();
+        const [signer] = await hre.ethers.getSigners();
 
         // Deploy Library contract
-        const LibraryFactory = await ethers.getContractFactory("Library");
+        const LibraryFactory = await hre.ethers.getContractFactory("Library");
         const libraryDeployment = await LibraryFactory.deploy();
         await libraryDeployment.waitForDeployment();
         libraryAddress = await libraryDeployment.getAddress();
         library = Library__factory.connect(libraryAddress, signer);
 
         // Deploy Caller contract with Library address
-        const CallerFactory = await ethers.getContractFactory("Caller");
+        const CallerFactory = await hre.ethers.getContractFactory("Caller");
         const callerDeployment = await CallerFactory.deploy(libraryAddress);
         await callerDeployment.waitForDeployment();
         const callerAddress = await callerDeployment.getAddress();
@@ -144,7 +144,7 @@ describe("Call vs DelegateCall", function () {
 
         it("Should demonstrate storage isolation between contracts", async function () {
             // Create a second Caller instance to show isolation
-            const CallerFactory = await ethers.getContractFactory("Caller");
+            const CallerFactory = await hre.ethers.getContractFactory("Caller");
             const caller2 = await CallerFactory.deploy(libraryAddress);
             await caller2.waitForDeployment();
 
@@ -179,7 +179,7 @@ describe("Call vs DelegateCall", function () {
         });
 
         it("Should handle large values correctly", async function () {
-            const largeValue = ethers.MaxUint256;
+            const largeValue = hre.ethers.MaxUint256;
 
             await caller.executeCall(largeValue);
             expect(await library.getValue()).to.equal(largeValue);

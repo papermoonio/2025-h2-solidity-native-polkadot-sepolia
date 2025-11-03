@@ -12,7 +12,7 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
-  "devDependencies": {
+  "dependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.0",
     "@types/chai": "^4.3.20",
     "@types/mocha": "^10.0.10",
@@ -20,5 +20,8 @@
     "hardhat": "^2.26.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "ethers": "^6.15.0"
   }
 }
